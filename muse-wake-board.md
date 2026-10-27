@@ -14,7 +14,7 @@ The worst case was the Milo monitor. It follows an email exchange between Dex an
 
 **Slowing the timers helped, but only so far.** Consolidating jobs and stretching intervals cut weekly wake-ups by about 90%. But the Milo monitor still had to wake every 10 minutes to stay responsive, about 1,000 times a week, and almost every wake found nothing.
 
-**Hooks looked like the way out, but couldn't reach the mail.** Muse supports hooks: plain scripts with no AI that poll on any interval and wake the agent only when they detect a change. A silent poll costs zero tokens. The catch is that hooks deliberately run without account credentials, so they can't read Gmail. And Gmail offers Muse no push notification.
+**Hooks looked like the way out, but couldn't reach the mail.** Muse supports [hooks](https://smartscope.blog/en/blog/claude-code-delegate-tasks-meta-muse-using-spreadsheets-2026/): plain scripts with no AI that poll on any interval and wake the agent only when they detect a change. A silent poll costs zero tokens. The catch is that hooks deliberately run without account credentials, so they can't read Gmail. And Gmail offers Muse no push notification.
 
 **What was needed** was a bridge: something with access to the mail that could publish a credential-free signal for a hook to watch. The Wake Board is that bridge, built so the same pattern can serve any future signal, not just Milo.
 
