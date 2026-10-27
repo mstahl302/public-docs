@@ -14,7 +14,7 @@ The worst case was the Milo monitor. It follows an email exchange between Dex an
 
 **Slowing the timers helped, but only so far.** Consolidating jobs and stretching intervals cut weekly wake-ups by about 90%. But the Milo monitor still had to wake every 10 minutes to stay responsive, about 1,000 times a week, and almost every wake found nothing.
 
-**Hooks looked like the way out, but couldn't reach the mail.** Muse supports [hooks](https://smartscope.blog/en/blog/claude-code-delegate-tasks-meta-muse-using-spreadsheets-2026/): plain scripts with no AI that poll on any interval and wake the agent only when they detect a change. A silent poll costs zero tokens. The catch is that hooks deliberately run without account credentials, so they can't read Gmail. And Gmail offers Muse no push notification.
+**Hooks looked like the way out, but couldn't reach the mail.** Muse supports [hooks](muse-hooks-guide.md): plain scripts with no AI that poll on any interval and wake the agent only when they detect a change. A silent poll costs zero tokens. The catch is that hooks deliberately run without account credentials, so they can't read Gmail. And Gmail offers Muse no push notification.
 
 **What was needed** was a bridge: something with access to the mail that could publish a credential-free signal for a hook to watch. The Wake Board is that bridge, built so the same pattern can serve any future signal, not just Milo.
 
@@ -26,13 +26,15 @@ Part 1 describes the pattern in general terms. Part 2 applies it to the Milo exc
 
 **The idea is to split watching from thinking.** Watching for new mail needs access to your account but no intelligence. Deciding what the mail means needs Dex, but only when there's something new. So a cheap script with mail access does the watching, and Dex is woken only when it finds something.
 
+**The core idea comes from SmartScope.** Their article [Delegating tasks to Meta Muse with wake-on-change polling](https://smartscope.blog/en/blog/claude-code-delegate-tasks-meta-muse-using-spreadsheets-2026/) has a Muse hook watch one counter cell in a public Google Sheet, so Muse wakes only when another tool bumps that number. The Wake Board adapts that idea: one row per signal instead of a single counter, plus a bridge script that turns Gmail events into those numbers.
+
 ![High-level design: event sources are seen by a bridge Apps Script, which writes numbers to the Wake Board sheet, all in your Google account; in Dex's Muse VM, a dispatcher hook reads the sheet every 60 seconds and wakes Dex, which runs the matching playbook](muse-wake-board-overview.png)
 
 **A bridge in your Google account does the watching.** The Bridge Apps Script is a small program in your Google account that runs every minute under your own login, so it can search your Gmail. When it finds an event you care about, it writes a number in the Wake Board spreadsheet, such as the time of the newest matching email. It never copies any content out of your mail.
 
 **A public spreadsheet carries the signal across.** The Wake Board is a Google Sheets spreadsheet with one row per signal and nothing but numbers in it. A signal is one kind of event you want Dex to react to, such as a new email from Milo. Anyone with the spreadsheet's link can read it, which is what lets a hook, which has no login, see it. Because it holds only numbers, reading it reveals nothing about your mail.
 
-**A free hook in Muse wakes Dex.** A [Muse hook](https://smartscope.blog/en/blog/claude-code-delegate-tasks-meta-muse-using-spreadsheets-2026/) is a small script with no AI that Muse runs on a timer. It wakes the agent only when the script reports a change, and running it costs no tokens. Here, a dispatcher hook reads the Wake Board every minute. If no number has risen, it does nothing and costs nothing. If one has, it wakes Dex with the names of the rows that changed.
+**A free hook in Muse wakes Dex.** A [Muse hook](muse-hooks-guide.md) is a small script with no AI that Muse runs on a timer. It wakes the agent only when the script reports a change, and running it costs no tokens. Here, a dispatcher hook reads the Wake Board every minute. If no number has risen, it does nothing and costs nothing. If one has, it wakes Dex with the names of the rows that changed.
 
 **Dex does the work only when there is work to do.** For each changed row, Dex follows that row's playbook, a short prompt file in Dex's workspace such as "read the new Milo email and handle it". Dex reads the actual mail through its own Gmail connector, as before. This is the only step that costs tokens.
 
@@ -371,4 +373,5 @@ fi
 - Dex's description of the Muse hook protocol (scripts, silent and wake verdicts, dry runs, no credentials), from a conversation with Dex, Oct 2026
 - Dex's usage audit (standing files loaded on every run, Milo monitor schedule), from a conversation with Dex, Oct 2026
 - [Quotas for Google services](https://developers.google.com/apps-script/guides/services/quotas?hl=en), Google Apps Script docs: 90 minutes a day of trigger runtime and 20,000 Gmail reads a day for personal accounts
-- [Delegating to Muse with wake-on-change polling](https://smartscope.blog/en/blog/claude-code-delegate-tasks-meta-muse-using-spreadsheets-2026/), SmartScope: a tested Google Sheet signal read by a Muse hook, with zero idle tokens
+- [Delegating to Muse with wake-on-change polling](https://smartscope.blog/en/blog/claude-code-delegate-tasks-meta-muse-using-spreadsheets-2026/), SmartScope: the original public-sheet signal and hook that this design adapts, with zero idle tokens
+- [Muse Hooks: A Programmer's Guide](muse-hooks-guide.md): the full hook protocol this design is built on
