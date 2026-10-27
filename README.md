@@ -6,7 +6,7 @@ Design docs and notes I write, often with AI.
 
 | Doc | Summary | Updated |
 | --- | --- | --- |
-| [Wake Board: Hook Design for Muse](muse-wake-board.md) | Let a Muse agent sleep at zero tokens and wake within minutes on new email, via a public sheet bridge and a credential-free hook | 2026-10-27 |
+| [Wake Board Hook Design for Dex, a Muse agent](muse-wake-board.md) | Let a Muse agent sleep at zero tokens and wake within minutes on new email, via a public sheet bridge and a credential-free hook | 2026-10-27 |
 <!-- Row format: | [Doc title](relative-path.md) | One-line summary | YYYY-MM-DD | -->
 
 ## How to publish

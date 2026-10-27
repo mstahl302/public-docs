@@ -1,10 +1,10 @@
-# Wake Board: Hook Design for Muse
+# Wake Board Hook Design for Dex, a Muse agent
 
 - **Status:** Draft
 - **Date:** 2026-10-27
 - **Summary:** Let a Muse agent sleep at zero tokens and wake within minutes when an email or other event arrives, using a public sheet of numbers as a bridge to a credential-free hook.
 
-The Wake Board lets Dex sleep at zero tokens and wake within minutes when something happens. A small script in your Google account turns events into numbers on a shared sheet, and a free hook in Muse wakes Dex only when a number rises.
+The Wake Board lets Dex sleep at zero tokens and wake within minutes when something happens. A small script in your Google account turns events into numbers in a shared spreadsheet, the Wake Board. A Muse hook, a small script Muse runs at no token cost, wakes Dex only when one of those numbers rises.
 
 ## Background
 
@@ -28,17 +28,17 @@ Part 1 describes the pattern in general terms. Part 2 applies it to the Milo exc
 
 ![High-level design: event sources are seen by a bridge Apps Script, which writes numbers to the Wake Board sheet, all in your Google account; in Dex's Muse VM, a dispatcher hook reads the sheet every 60 seconds and wakes Dex, which runs the matching playbook](muse-wake-board-overview.png)
 
-**A bridge in your Google account does the watching.** It's a small Apps Script that runs every minute under your own login, so it can search your Gmail. When it finds an event you care about, it writes a number on a sheet, such as the time of the newest matching email. It never copies any content out of your mail.
+**A bridge in your Google account does the watching.** The Bridge Apps Script is a small program in your Google account that runs every minute under your own login, so it can search your Gmail. When it finds an event you care about, it writes a number in the Wake Board spreadsheet, such as the time of the newest matching email. It never copies any content out of your mail.
 
-**A public sheet carries the signal across.** The Wake Board is a Google Sheet with one row per signal and nothing but numbers in it. Anyone with its link can read it, which is what lets a credential-free hook see it. Because it holds only numbers, reading it reveals nothing about your mail.
+**A public spreadsheet carries the signal across.** The Wake Board is a Google Sheets spreadsheet with one row per signal and nothing but numbers in it. A signal is one kind of event you want Dex to react to, such as a new email from Milo. Anyone with the spreadsheet's link can read it, which is what lets a hook, which has no login, see it. Because it holds only numbers, reading it reveals nothing about your mail.
 
-**A free hook in Muse wakes Dex.** A plain script with no AI reads the sheet every minute. If no number has risen, it does nothing and costs nothing. If one has, it wakes Dex with the names of the rows that changed.
+**A free hook in Muse wakes Dex.** A Muse hook is a small script with no AI that Muse runs on a timer. It wakes the agent only when the script reports a change, and running it costs no tokens ([how Muse hooks work](https://smartscope.blog/en/blog/claude-code-delegate-tasks-meta-muse-using-spreadsheets-2026/)). Here, a dispatcher hook reads the Wake Board every minute. If no number has risen, it does nothing and costs nothing. If one has, it wakes Dex with the names of the rows that changed.
 
-**Dex does the real work, and only then.** For each changed row, Dex follows that row's playbook, a short prompt file such as "read the new Milo email and handle it". It reads the actual mail through its own connector, as before. This is the only step that costs tokens.
+**Dex does the work only when there is work to do.** For each changed row, Dex follows that row's playbook, a short prompt file in Dex's workspace such as "read the new Milo email and handle it". Dex reads the actual mail through its own Gmail connector, as before. This is the only step that costs tokens.
 
-**One board serves every signal.** Adding a new trigger means adding a row, a playbook and, for Gmail, one rule in the bridge. You can also bump a row by hand from your phone to make Dex run something on demand.
+**One Wake Board serves every signal.** Adding a new signal means adding a row to the Wake Board spreadsheet, adding a playbook file to Dex's workspace, and, for email signals, adding a rule to the Bridge Apps Script that scans your Gmail. You can also raise a row's number by hand, even from your phone, to make Dex run that row's playbook on demand.
 
-**The result: waiting is free, and alerts arrive in 1 to 3 minutes.** Dex pays about 45,000 tokens per wake only when something actually happened, instead of on every check of an empty inbox. If the bridge ever stops, the hook notices and tells you, and the regular 30-minute email check remains a backstop.
+**The result: waiting is free, and alerts arrive in 1 to 3 minutes.** Dex pays about 45,000 tokens per wake only when something actually happened, instead of on every check of an empty inbox. If the Bridge Apps Script ever stops running, the dispatcher hook notices and tells you. Dex's regular 30-minute email check provides a backstop in the meantime.
 
 ### Components
 
@@ -47,83 +47,83 @@ There are five pieces. Three are shared machinery built once, and two are added 
 | Component | What it is | Where it runs | Shared or per signal |
 | --- | --- | --- | --- |
 | Event source | Something that happens: an email, a calendar change, or you bumping a row | Your accounts | Per signal |
-| Bridge | An Apps Script holding a list of rules. Each rule turns one kind of event into a number on one board row. | Your Google account, every minute | One script, one rule per signal |
+| Bridge | An Apps Script holding a list of rules. Each rule turns one kind of event into a number on one Wake Board row. | Your Google account, every minute | One script, one rule per signal |
 | Wake Board | A Google Sheet with a `board` tab and three columns: id, value, checked_at | Your Google Drive, view-only link | One sheet, one row per signal |
-| Dispatcher hook | A bash script with no AI that polls the board and wakes Dex with the ids whose values rose | Dex's Muse VM, every 60 seconds | One hook |
+| Dispatcher hook | A bash script with no AI that polls the Wake Board and wakes Dex with the ids whose values rose | Dex's Muse VM, every 60 seconds | One hook |
 | Playbook | A file at `~/hooks/playbooks/<id>.md` holding the prompt Dex runs when that row rises | Dex's Muse VM | One file per signal |
 
-What the board's columns mean:
+What the Wake Board's columns mean:
 
 - **id:** the signal's short name, in lowercase letters, digits and hyphens.
 - **value:** a number that only ever rises, such as the timestamp of the newest matching email or a counter you bump.
 - **checked_at:** when the bridge last checked this row, in epoch seconds. It's blank for rows you bump by hand. The hook uses it to notice if the bridge stops running.
 
-The board is shared as "Anyone with the link: Viewer", and only you can edit it. Hooks can't log in to anything, so a view link is the only way they can read it.
+The Wake Board spreadsheet is shared as "Anyone with the link: Viewer", and only you can edit it. Hooks can't log in to anything, so a view link is the only way they can read it.
 
-The hook stays silent at zero tokens when nothing rose. Dex spends tokens only when it wakes to run a playbook.
+The dispatcher hook stays silent at zero tokens when no number rose. Dex spends tokens only when it wakes to run a playbook.
 
 ### Scaling: one board, many rows
 
-Each new signal is a new row on the same board, not a new file and not a new hook. Whether you have one signal or twenty, there's still one sheet, one bridge script, one hook and one fetch per minute.
+Each new signal is a new row in the same Wake Board spreadsheet, not a new spreadsheet and not a new hook. Whether you have one signal or twenty, there's still one spreadsheet, one Bridge Apps Script, one dispatcher hook and one fetch per minute.
 
 Adding a signal costs:
 
-- One board row.
+- One row in the Wake Board.
 - One playbook file.
-- One bridge rule, only if the signal comes from Gmail or another Google service. Rows you bump by hand need none.
+- One rule in the Bridge Apps Script, only if the signal comes from Gmail or another Google service. Rows you bump by hand need none.
 
 If several rows rise in the same minute, Dex wakes once and runs each matching playbook in that single wake. That's cheaper than a wake per signal.
 
-**Why rows rather than one file per hook.** Hooks can't log in, so every file would need its own public link and its own fetch. A hook per file also means N hooks to register, test and keep alive. One board keeps all of that to a single link, a single fetch and a single place to see and bump everything.
+**Why rows rather than one spreadsheet per signal.** Hooks can't log in, so every spreadsheet would need its own public link and its own fetch. A hook per spreadsheet would also mean one more hook to register, test and keep alive for every signal. One Wake Board keeps all of that to a single link, a single fetch and a single place to see and bump everything.
 
-**When to split into a second board and hook:**
+**When to split into a second Wake Board and dispatcher hook:**
 
-- **A signal needs a different speed.** The one hook polls every row at the same interval. If one signal must be checked every 15 seconds, or could be checked hourly, give it a copy of the hook that reads only its rows.
-- **A signal is more private.** Anyone with the link sees row names and timestamps. If even that is sensitive for some signal, put it on its own board with its own link.
-- **The bridge gets busy.** Personal Google accounts get 90 minutes a day of Apps Script trigger runtime, or about 3.7 seconds per run at once a minute. Each Gmail rule costs roughly a second per run, so a handful of rules fits comfortably. Beyond that, check every 2 minutes or split the rules across two scripts.
+- **A signal needs a different speed.** The dispatcher hook polls every row at the same interval. If one signal must be checked every 15 seconds, or could be checked hourly, give it a copy of the hook that reads only its rows.
+- **A signal is more private.** Anyone with the link sees row names and timestamps. If even that is sensitive for some signal, put it in its own spreadsheet with its own link.
+- **The Bridge Apps Script gets busy.** Personal Google accounts get 90 minutes a day of Apps Script trigger runtime, or about 3.7 seconds per run at once a minute. Each Gmail rule costs roughly a second per run, so a handful of rules fits comfortably. Beyond that, check every 2 minutes or split the rules across two scripts.
 
-The hook side doesn't limit you. Fetching a sheet with dozens of rows is one small download either way.
+The dispatcher hook doesn't limit you. Fetching a sheet with dozens of rows is one small download either way.
 
 ### Safety rules
 
-The board carries signals and the playbooks carry instructions, and the two never mix. Each rule below is built into the hook script.
+The Wake Board carries signals and the playbook files carry instructions, and the two never mix. Each rule below is built into the dispatcher hook script.
 
-- **The board holds numbers only.** Never names, subjects, content or instructions. The hook ignores anything that isn't a valid id and number, so nobody can steer Dex by editing or spoofing the sheet.
+- **The Wake Board holds numbers only.** Never names, subjects, content or instructions. The dispatcher hook ignores anything that isn't a valid id and number, so nobody can steer Dex by editing or spoofing the sheet.
 - **Instructions live only in playbooks.** Those are files on Dex's VM that only you and Dex write. The wake payload is a list of ids, nothing more.
 - **A new row starts silently.** Its first value is recorded as the baseline, so adding a row never fires a false wake.
-- **Failures stay quiet.** If the fetch fails or the sheet looks wrong, the hook logs it and stays silent, never waking on a maybe.
+- **Failures stay quiet.** If the fetch fails or the sheet looks wrong, the dispatcher hook logs it and stays silent, never waking on a maybe.
 - **Dry runs are safe.** They never write state, so testing can't consume a real event.
-- **A broken bridge gets reported.** If any bridge row hasn't been checked for 20 minutes, Dex tells you once, then stays quiet until the bridge recovers.
+- **A broken bridge gets reported.** If the Bridge Apps Script hasn't updated its rows for 20 minutes, Dex tells you once, then stays quiet until the script recovers.
 
 ### Adding a new signal
 
-Once the shared machinery exists, a new signal takes three steps and no changes to the hook.
+Once the shared machinery exists, a new signal takes three steps and no changes to the dispatcher hook.
 
-1. **Add a row to the board**: its id, a value of 0, and a blank checked_at.
+1. **Add a row to the Wake Board**: its id, a value of 0, and a blank checked_at.
 2. **Ask Dex to write the playbook**: "Create ~/hooks/playbooks/[id].md that does [what you want when this row rises]."
-3. **For a Gmail-driven signal, add a bridge rule**: one more entry in the script's `RULES` list, with a Gmail query and the sender address to count. Skip this step for rows you bump by hand.
+3. **For a Gmail-driven signal, add a rule to the Bridge Apps Script**: one more entry in the script's `RULES` list, with a Gmail query and the sender address to count. Skip this step for rows you bump by hand.
 
 Some examples of what a row could be:
 
 - **A Gmail rule:** mail from a specific sender, such as a school, bank or doctor's office.
 - **A manual row:** something like `brief-now`, which makes Dex send an on-demand briefing whenever you bump it from your phone.
-- **Other Google services:** a calendar or Drive change, using a different kind of bridge rule. The design leaves room for these, but I haven't written them.
+- **Other Google services:** a calendar or Drive change, using a different kind of Bridge Apps Script rule. The design leaves room for these, but I haven't written them.
 
 ### Limits of the pattern
 
 The main risk is a quiet failure on the Google side, and the stale-bridge alert covers it.
 
-- **It's fast polling, not push.** Expect 1 to 3 minutes from an event to Dex: up to a minute for the bridge, up to a minute for the hook, plus Dex starting up.
+- **It's fast polling, not push.** Expect 1 to 3 minutes from an event to Dex: up to a minute for the Bridge Apps Script, up to a minute for the dispatcher hook, plus Dex starting up.
 - **It only sees what your Google account can see.** That means Gmail, Calendar, Drive, or a row you bump. Texts and Messenger don't pass through Google, so they still need an agent job.
-- **The bridge can stop.** A password change, revoked access, or Google pausing a failing trigger would halt it. Dex tells you within about 20 minutes.
+- **The Bridge Apps Script can stop.** A password change, revoked access, or Google pausing a failing trigger would halt it. Dex tells you within about 20 minutes.
 - **The link is public.** Anyone with the link can see row names and timestamps, though no content. The link is long and unguessable, and generic row names reduce what it reveals.
 - **Each wake still costs the usual ~45K tokens.** The savings come from waking only when something happened, not from cheaper wakes.
-- **Bumping by hand only works upward.** A value has to rise above the last one the hook saw. A typo that isn't a number is logged and ignored.
-- **Lost state re-baselines.** If the hook's state is ever wiped, the next poll records the current values silently, which could skip one event. Keep a backstop job for anything that matters.
+- **Bumping by hand only works upward.** A value has to rise above the last one the dispatcher hook saw. A typo that isn't a number is logged and ignored.
+- **Lost state re-baselines.** If the dispatcher hook's state is ever wiped, the next poll records the current values silently, which could skip one event. Keep a backstop job for anything that matters.
 
 ## Part 2: The Milo instance
 
-The first signal on the board is incoming Milo email. It uses one board row, one bridge rule and one playbook; everything else is the shared machinery from Part 1.
+The first signal in the Wake Board is incoming Milo email. It uses one Wake Board row, one Bridge Apps Script rule and one playbook file; everything else is the shared machinery from Part 1.
 
 ### How the pieces fit
 
@@ -135,7 +135,7 @@ Only the Dex AI Processor costs tokens, and it runs only when a WakeBoard value 
 
 Dex wakes once per incoming Milo email and never on its own outgoing messages. Between emails, it costs nothing.
 
-**Trigger.** The bridge's `milo` rule searches Gmail with:
+**Trigger.** The Bridge Apps Script's `milo` rule searches Gmail with:
 
 ```text
 from:milo-sender@example.com Milo (Dex OR Dexter) newer_than:2d
@@ -161,21 +161,21 @@ Woken because a new incoming Milo email arrived (the Wake Board's milo value ros
 | Token cost when Milo is quiet | About 45M a week | Zero |
 | Backstop | Email Watcher, 30 min | Email Watcher, 30 min |
 
-The 1 to 3 minutes comes from the bridge running every minute, the hook polling every 60 seconds, and Dex starting up. Setting the hook to 30 seconds would shave off up to half a minute at no token cost.
+The 1 to 3 minutes comes from the Bridge Apps Script running every minute, the dispatcher hook polling every 60 seconds, and Dex starting up. Setting the dispatcher hook to 30 seconds would shave off up to half a minute at no token cost.
 
-On the Google side, personal accounts get 90 minutes a day of Apps Script trigger runtime. A check that takes a second or two, once a minute, uses well under that. If Google ever warns about the quota, switch the bridge to every 2 minutes.
+On the Google side, personal accounts get 90 minutes a day of Apps Script trigger runtime. A check that takes a second or two, once a minute, uses well under that. If Google ever warns about the quota, switch the Bridge Apps Script to every 2 minutes.
 
-**Milo-specific limits.** The rule only counts emails from Milo's owner's address that contain "Milo" and either "Dex" or "Dexter". Anything that doesn't match, or that arrives while the bridge is down, still reaches you through the Email Watcher's Milo hot-list entry within 30 minutes.
+**Milo-specific limits.** The rule only counts emails from the address of Milo's owner that contain "Milo" and either "Dex" or "Dexter". Anything that doesn't match, or that arrives while the Bridge Apps Script is down, still reaches you through the Email Watcher's Milo hot-list entry within 30 minutes.
 
 ### Setup, your part (about 15 minutes)
 
-You build the board and the bridge; Dex never touches your Google account.
+You build the Wake Board and the Bridge Apps Script; Dex never touches your Google account.
 
 1. **Create the board.** In Google Drive, make a folder called "Muse Hooks" and a Google Sheet in it called "Wake Board".
     - Rename the first tab to `board`.
     - Fill in three rows: `id | value | checked_at`, then `milo | 0 |` and `test | 0 |` (leave checked_at blank).
 2. **Share it as view-only.** Share → General access → "Anyone with the link" → Viewer. Copy the sheet ID, the long string between `/d/` and `/edit` in the URL.
-3. **Add the bridge.** In the sheet, open Extensions → Apps Script.
+3. **Add the Bridge Apps Script.** In the sheet, open Extensions → Apps Script.
     - Replace the starter code with the bridge script from the Code section.
     - Put your sheet ID in place of `PASTE_SHEET_ID_HERE`, then save.
 4. **Turn it on.** Pick `install` in the function menu and click Run.
