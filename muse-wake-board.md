@@ -8,7 +8,7 @@ The Wake Board lets Dex sleep at zero tokens and wake within minutes when someth
 
 ## Background
 
-**Responsiveness was costing most of the weekly allowance.** Dex, my Muse agent, watches my mail and messages so it can tell me about important conversations during the day. The only way it could notice new mail was to wake on a timer and look. Every wake reloads about 45,000 tokens of standing context (instructions, memory and profile files) before doing anything, whether or not there's new mail.
+**Responsiveness was costing most of the weekly allowance.** Dex, my Muse agent, watches my mail and messages so it can tell me about important conversations during the day. The only way it could notice new mail was to wake on a timer and look. Every wake reloads about 170,000 tokens of standing context (instructions, memory and profile files) before doing anything, whether or not there's new mail.
 
 The worst case was the Milo monitor. It follows an email exchange between Dex and Milo, another person's AI agent, and needs fast replies. It woke every minute, about 10,000 times a week. Together with a dozen other loops, it used up the 500M-token Power allowance before the week was out.
 
@@ -18,7 +18,7 @@ The worst case was the Milo monitor. It follows an email exchange between Dex an
 
 **What was needed** was a bridge: something with access to the mail that could publish a credential-free signal for a hook to watch. The Wake Board is that bridge, built so the same pattern can serve any future signal, not just Milo.
 
-Part 1 describes the pattern in general terms. Part 2 applies it to the Milo exchange, turning about 1,000 wake-ups a week (roughly 45M tokens) into one wake per Milo email, with faster alerts.
+Part 1 describes the pattern in general terms. Part 2 applies it to the Milo exchange, turning about 1,000 wake-ups a week (roughly 170M tokens) into one wake per Milo email, with faster alerts.
 
 ## Part 1: The general pattern
 
@@ -32,13 +32,13 @@ Part 1 describes the pattern in general terms. Part 2 applies it to the Milo exc
 
 **A public spreadsheet carries the signal across.** The Wake Board is a Google Sheets spreadsheet with one row per signal and nothing but numbers in it. A signal is one kind of event you want Dex to react to, such as a new email from Milo. Anyone with the spreadsheet's link can read it, which is what lets a hook, which has no login, see it. Because it holds only numbers, reading it reveals nothing about your mail.
 
-**A free hook in Muse wakes Dex.** A Muse hook is a small script with no AI that Muse runs on a timer. It wakes the agent only when the script reports a change, and running it costs no tokens ([how Muse hooks work](https://smartscope.blog/en/blog/claude-code-delegate-tasks-meta-muse-using-spreadsheets-2026/)). Here, a dispatcher hook reads the Wake Board every minute. If no number has risen, it does nothing and costs nothing. If one has, it wakes Dex with the names of the rows that changed.
+**A free hook in Muse wakes Dex.** A [Muse hook](https://smartscope.blog/en/blog/claude-code-delegate-tasks-meta-muse-using-spreadsheets-2026/) is a small script with no AI that Muse runs on a timer. It wakes the agent only when the script reports a change, and running it costs no tokens. Here, a dispatcher hook reads the Wake Board every minute. If no number has risen, it does nothing and costs nothing. If one has, it wakes Dex with the names of the rows that changed.
 
 **Dex does the work only when there is work to do.** For each changed row, Dex follows that row's playbook, a short prompt file in Dex's workspace such as "read the new Milo email and handle it". Dex reads the actual mail through its own Gmail connector, as before. This is the only step that costs tokens.
 
 **One Wake Board serves every signal.** Adding a new signal means adding a row to the Wake Board spreadsheet, adding a playbook file to Dex's workspace, and, for email signals, adding a rule to the Bridge Apps Script that scans your Gmail. You can also raise a row's number by hand, even from your phone, to make Dex run that row's playbook on demand.
 
-**The result: waiting is free, and alerts arrive in 1 to 3 minutes.** Dex pays about 45,000 tokens per wake only when something actually happened, instead of on every check of an empty inbox. If the Bridge Apps Script ever stops running, the dispatcher hook notices and tells you. Dex's regular 30-minute email check provides a backstop in the meantime.
+**The result: waiting is free, and alerts arrive in 1 to 3 minutes.** Dex pays about 170,000 tokens per wake only when something actually happened, instead of on every check of an empty inbox. If the Bridge Apps Script ever stops running, the dispatcher hook notices and tells you. Dex's regular 30-minute email check provides a backstop in the meantime.
 
 ### Components
 
@@ -117,7 +117,7 @@ The main risk is a quiet failure on the Google side, and the stale-bridge alert 
 - **It only sees what your Google account can see.** That means Gmail, Calendar, Drive, or a row you bump. Texts and Messenger don't pass through Google, so they still need an agent job.
 - **The Bridge Apps Script can stop.** A password change, revoked access, or Google pausing a failing trigger would halt it. Dex tells you within about 20 minutes.
 - **The link is public.** Anyone with the link can see row names and timestamps, though no content. The link is long and unguessable, and generic row names reduce what it reveals.
-- **Each wake still costs the usual ~45K tokens.** The savings come from waking only when something happened, not from cheaper wakes.
+- **Each wake still costs the usual ~170K tokens.** The savings come from waking only when something happened, not from cheaper wakes.
 - **Bumping by hand only works upward.** A value has to rise above the last one the dispatcher hook saw. A typo that isn't a number is logged and ignored.
 - **Lost state re-baselines.** If the dispatcher hook's state is ever wiped, the next poll records the current values silently, which could skip one event. Keep a backstop job for anything that matters.
 
@@ -158,7 +158,7 @@ Woken because a new incoming Milo email arrived (the Wake Board's milo value ros
 | --- | --- | --- |
 | Time to notice a Milo email | 2 min during a burst, up to 10 min when quiet | About 1 to 3 min, always |
 | Agent wake-ups | About 1,000 a week, plus bursts | One per Milo email |
-| Token cost when Milo is quiet | About 45M a week | Zero |
+| Token cost when Milo is quiet | About 170M a week | Zero |
 | Backstop | Email Watcher, 30 min | Email Watcher, 30 min |
 
 The 1 to 3 minutes comes from the Bridge Apps Script running every minute, the dispatcher hook polling every 60 seconds, and Dex starting up. Setting the dispatcher hook to 30 seconds would shave off up to half a minute at no token cost.
@@ -369,6 +369,6 @@ fi
 ## Sources
 
 - Dex's description of the Muse hook protocol (scripts, silent and wake verdicts, dry runs, no credentials), from a conversation with Dex, Oct 2026
-- Dex's usage audit (fixed context of about 44,600 tokens per run, Milo monitor schedule), from a conversation with Dex, Oct 2026
+- Dex's usage audit (standing files loaded on every run, Milo monitor schedule), from a conversation with Dex, Oct 2026
 - [Quotas for Google services](https://developers.google.com/apps-script/guides/services/quotas?hl=en), Google Apps Script docs: 90 minutes a day of trigger runtime and 20,000 Gmail reads a day for personal accounts
 - [Delegating to Muse with wake-on-change polling](https://smartscope.blog/en/blog/claude-code-delegate-tasks-meta-muse-using-spreadsheets-2026/), SmartScope: a tested Google Sheet signal read by a Muse hook, with zero idle tokens
