@@ -62,7 +62,7 @@ The dispatcher is what lets a single watcher hook serve every signal on the Wake
 | Dispatcher (the hook's worker instruction) | Opens the playbook file for each changed id | No |
 | Playbook file | Does the work for one signal | Yes: one new file per signal |
 
-Because neither the watcher hook nor the dispatcher ever changes, adding a signal only takes a new Wake Board row, a new playbook file and, for an email signal, a new Bridge Apps Script rule. All signals share the one hook. If several rows rise in the same minute, a single wake runs all of their playbooks.
+Because neither the watcher hook nor the dispatcher ever changes, adding a signal only takes a new Wake Board row, a new playbook file and, for an email signal, a new Bridge Apps Script rule. All signals share one Wake Board spreadsheet, which is read by a shared watcher hook script that invokes a common dispatcher prompt. If several rows rise in the same minute, a single wake runs all of their playbooks.
 
 ### Components
 
